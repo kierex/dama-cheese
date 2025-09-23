@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dama (Checkers) — HTML + JavaScript</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+    :root{
+      --light:#f8e1c4;
+      --dark:#7a5230;
+      --accent:#ff914d;
+      --red:#ff4d4d;
+      --black:#1c1c1c;
+      --bg:#1e1e2f;
+      --panel:#292941;
+    }
+    body{
+      font-family:'Poppins',sans-serif;
+      margin:0;
+      display:flex;
+      min-height:100vh;
+      align-items:center;
+      justify-content:center;
+      background:radial-gradient(circle at top,#2c2c54,#1e1e2f);
+      color:white;
+    }
+    .wrap{
+      display:grid;
+      grid-template-columns:400px 300px;
+      gap:30px;
+      padding:30px;
+      border-radius:20px;
+      background:var(--panel);
+      box-shadow:0 15px 40px rgba(0,0,0,0.5);
+      animation:fadeIn 1s ease;
+    }
+    @keyframes fadeIn{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+
+    .board{
+      width:400px;
+      height:400px;
+      display:grid;
+      grid-template-columns:repeat(8,1fr);
+      border-radius:16px;
+      overflow:hidden;
+      border:6px solid var(--accent);
+      box-shadow:0 6px 20px rgba(0,0,0,0.3);
+      background:linear-gradient(145deg,#222,#111);
+      position:relative;
+    }
+    .cell{position:relative;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;transition:background .3s,transform .2s;}
+    .cell.dark{background:linear-gradient(145deg,var(--dark),#5a3b2a);}
+    .cell.light{background:var(--light);}
+    .piece{
+      width:70%;
+      height:70%;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      color:white;
+      cursor:pointer;
+      box-shadow:0 4px 8px rgba(0,0,0,0.5);
+      transition:transform .2s,box-shadow .2s,top .2s,left .2s;
+      position:relative;
+    }
+    .piece:hover{transform:scale(1.05);}
+    .piece.red{background:linear-gradient(145deg,#ff5f6d,#ff4d4d);}
+    .piece.black{background:linear-gradient(145deg,#434343,#000);}
+    .piece.king{box-shadow:0 0 15px 3px gold inset,0 6px 10px rgba(0,0,0,0.7);}
+    .cell.highlight::after{content:"";position:absolute;inset:6px;border-radius:12px;box-shadow:inset 0 0 0 4px rgba(255,145,77,0.5);animation:pulse 1s infinite alternate;}
+    @keyframes pulse{from{transform:scale(1);}to{transform:scale(1.03);}}
+    .cell.move-target{outline:4px solid rgba(255,145,77,0.6);}
+
+    .sidebar{padding:12px;display:flex;flex-direction:column;justify-content:space-between;}
+    h1{margin:0 0 15px 0;font-size:24px;color:var(--accent);text-shadow:0 0 10px rgba(255,145,77,0.7);}
+    .controls{display:flex;gap:10px;margin-bottom:15px}
+    button{flex:1;background:var(--accent);color:white;border:none;padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:600;box-shadow:0 4px 10px rgba(0,0,0,0.3);transition:transform .2s,background .3s;}
+    button:hover{transform:translateY(-2px);background:#ff7326;}
+    .mode-select{display:flex;flex-direction:column;gap:6px;margin-bottom:15px}
+    label{display:flex;gap:8px;align-items:center;font-size:14px;}
+    .info{margin-bottom:12px;font-size:14px;color:#ccc}
+    .log{flex:1;overflow:auto;padding:10px;background:rgba(255,255,255,0.03);border-radius:10px;font-size:13px;color:#eee;box-shadow:inset 0 0 10px rgba(0,0,0,0.4)}
+    .log div{padding:6px 0;border-bottom:1px dashed rgba(255,255,255,0.02)}
+    .status{margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,145,77,0.06);color:#ffb37a;font-size:14px;text-align:center}
+    footer{font-size:12px;color:#aaa;margin-top:12px;text-align:center}
+
+    @media (max-width:880px){.wrap{grid-template-columns:1fr;max-width:95vw}.board{width:100%;height:auto;aspect-ratio:1/1}.sidebar{min-width:unset}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <div class="board" id="board" aria-label="Dama board"></div>
+    </div>
+    <aside class="sidebar">
+      <div>
+        <h1>Dama / Checkers</h1>
+        <div class="controls">
+          <button id="newBtn">New Game</button>
+          <button id="undoBtn">Undo</button>
+        </div>
+        <div class="mode-select">
+          <label><input type="radio" name="mode" value="pvp" checked> Two-player</label>
+          <label><input type="radio" name="mode" value="ai"> vs Computer</label>
+        </div>
+        <div class="info">
+          <div>Current turn: <strong id="turnText">Red</strong></div>
+          <div>Move type: <span id="moveType">Normal</span></div>
+        </div>
+        <div class="log" id="log"></div>
+      </div>
+      <div class="status" id="status">Click a piece to start.</div>
+      <footer>8×8 board, dark squares only. Forced captures. Kings move backward.</footer>
+    </aside>
+  </div>
+
+  <script>
+  // Fully working Dama (Checkers) implementation
+  const boardEl = document.getElementById('board');
+  const logEl = document.getElementById('log');
+  const turnText = document.getElementById('turnText');
+  const moveTypeEl = document.getElementById('moveType');
+  const statusEl = document.getElementById('status');
+  const newBtn = document.getElementById('newBtn');
+  const undoBtn = document.getElementById('undoBtn');
+
+  let state = { board: [], turn: 'red', selected: null, history: [], mode: 'pvp' };
+
+  function createEmptyBoard(){
+    const b = Array.from({length:8},()=>Array(8).fill(null));
+    for(let r=0;r<8;r++){
+      for(let c=0;c<8;c++){
+        if((r+c)%2===1) b[r][c] = null;
+        else b[r][c] = 'X';
+      }
+    }
+    return b;
+  }
+
+  function setupNewGame(){
+    const b = createEmptyBoard();
+    for(let r=0;r<3;r++){
+      for(let c=0;c<8;c++) if(b[r][c]===null) b[r][c] = {color:'black', king:false};
+    }
+    for(let r=5;r<8;r++){
+      for(let c=0;c<8;c++) if(b[r][c]===null) b[r][c] = {color:'red', king:false};
+    }
+    state.board = b; state.turn='red'; state.selected=null; state.history=[]; clearLog(); updateUI(); log('New game started');
+  }
+
+  function renderBoard(){
+    boardEl.innerHTML = '';
+    for(let r=0;r<8;r++){
+      for(let c=0;c<8;c++){
+        const cell = document.createElement('div');
+        cell.className = 'cell ' + (((r+c)%2===1)?'dark':'light');
+        cell.dataset.r = r; cell.dataset.c = c;
+        if((r+c)%2===1){
+          const piece = state.board[r][c];
+          if(piece){
+            const p = document.createElement('div');
+            p.className = `piece ${piece.color} ${piece.king? 'king': ''}`;
+            p.textContent = piece.king ? '♔' : '';
+            p.addEventListener('click', (e)=>{ e.stopPropagation(); onClickPiece(r,c); });
+            cell.appendChild(p);
+          }
+          cell.addEventListener('click', ()=> onClickCell(r,c));
+        }
+        boardEl.appendChild(cell);
+      }
+    }
+    highlightPossible();
+  }
+
+  function updateUI(){
+    renderBoard();
+    turnText.textContent = capitalize(state.turn);
+    const forced = getAllCaptures(state.turn).length > 0;
+    moveTypeEl.textContent = forced? 'Capture required' : 'Normal';
+    state.moveForced = forced;
+    statusEl.textContent = 'Turn: ' + capitalize(state.turn) + (state.selected? ' — piece selected': '');
+  }
+
+  function onClickPiece(r,c){
+    const piece = state.board[r][c];
+    if(!piece || piece.color !== state.turn) return;
+    state.selected = {r,c};
+    log('Selected ' + piece.color + ' at ' + posStr(r,c));
+    highlightPossible();
+  }
+
+  function onClickCell(r,c){
+    if(!state.selected) return;
+    const from = state.selected; const to = {r,c};
+    const moves = getValidMovesFor(from.r, from.c);
+    const found = moves.find(m => m.to.r===to.r && m.to.c===to.c);
+    if(found){
+      makeMove(found);
+      state.selected = null;
+      updateUI();
+      if(state.mode==='ai' && state.turn==='black'){
+        setTimeout(()=> aiMove(), 350);
+      }
+    } else {
+      state.selected = null; highlightPossible();
+    }
+  }
+
+  function getAllPieces(color){
+    const arr=[]; for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const p = state.board[r][c]; if(p && p.color===color) arr.push({r,c,p});
+    } return arr;
+  }
+
+  function getValidMovesFor(r,c){
+    const piece = state.board[r][c]; if(!piece) return [];
+    const directions = [];
+    if(piece.king || piece.color==='red') directions.push([-1,-1],[-1,1]);
+    if(piece.king || piece.color==='black') directions.push([1,-1],[1,1]);
+
+    const playerCaptures = getAllCaptures(state.turn);
+    const moves = [];
+
+    for(const [dr,dc] of directions){
+      const nr = r + dr; const nc = c + dc;
+      if(!inBounds(nr,nc)) continue;
+      const target = state.board[nr][nc];
+      if(target===null && playerCaptures.length===0){
+        moves.push({from:{r,c},to:{r:nr,c:nc},capture:null});
+      }
+      if(target && target.color !== piece.color){
+        const jr = nr + dr; const jc = nc + dc;
+        if(inBounds(jr,jc) && state.board[jr][jc]===null){
+          moves.push({from:{r,c},to:{r:jr,c:jc},capture:{r:nr,c:nc}});
+        }
+      }
+    }
+    return moves;
+  }
+
+  function getAllCaptures(color){
+    const captures = [];
+    const pieces = getAllPieces(color);
+    for(const it of pieces){
+      const r=it.r,c=it.c; const piece = it.p;
+      const directions = [];
+      if(piece.king || piece.color==='red') directions.push([-1,-1],[-1,1]);
+      if(piece.king || piece.color==='black') directions.push([1,-1],[1,1]);
+      for(const [dr,dc] of directions){
+        const nr=r+dr, nc=c+dc; if(!inBounds(nr,nc)) continue; const target = state.board[nr][nc];
+        if(target && target.color!==color){ const jr=nr+dr, jc=nc+dc; if(inBounds(jr,jc) && state.board[jr][jc]===null) captures.push({from:{r,c},to:{r:jr,c:jc},capture:{r:nr,c:nc}});
+        }
+      }
+    }
+    return captures;
+  }
+
+  function makeMove(move){
+    state.history.push(JSON.parse(JSON.stringify({board:state.board,turn:state.turn})));
+
+    const f = move.from, t = move.to;
+    const piece = state.board[f.r][f.c];
+    state.board[f.r][f.c] = null;
+    state.board[t.r][t.c] = piece;
+    if(move.capture){
+      state.board[move.capture.r][move.capture.c] = null;
+      log(`${capitalize(piece.color)} captured at ${posStr(move.capture.r,move.capture.c)}`);
+      const further = getValidMovesFor(t.r,t.c).filter(m=> m.capture);
+      if(further.length>0){
+        state.selected = {r:t.r,c:t.c};
+        log('Multi-capture available. Continue with same piece.');
+        updateUI();
+        return;
+      }
+    }
+
+    if(!piece.king){
+      if(piece.color==='red' && t.r===0){ piece.king=true; log('Red piece became KING!'); }
+      if(piece.color==='black' && t.r===7){ piece.king=true; log('Black piece became KING!'); }
+    }
+
+    state.turn = (state.turn==='red')? 'black' : 'red';
+    state.selected = null;
+    const winner = checkWinner();
+    if(winner) { log('Game over: ' + capitalize(winner) + ' wins!'); statusEl.textContent = 'Game Over — ' + capitalize(winner) + ' wins!'; }
+    else statusEl.textContent = 'Turn: ' + capitalize(state.turn);
+    updateUI();
+  }
+
+  function inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+
+  function highlightPossible(){
+    const cells = boardEl.querySelectorAll('.cell');
+    cells.forEach(el=>{ el.classList.remove('highlight'); el.classList.remove('move-target'); });
+    if(state.selected){
+      const s = state.selected; const selCell = boardEl.querySelector(`.cell[data-r='${s.r}'][data-c='${s.c}']`);
+      if(selCell) selCell.classList.add('highlight');
+      const moves = getValidMovesFor(s.r,s.c);
+      moves.forEach(m=>{
+        const tgt = boardEl.querySelector(`.cell[data-r='${m.to.r}'][data-c='${m.to.c}']`);
+        if(tgt) tgt.classList.add('move-target');
+      });
+    } else{
+      const captures = getAllCaptures(state.turn);
+      if(captures.length>0){
+        const coords = new Set(captures.map(c=> (c.from.r*8+c.from.c)));
+        coords.forEach(i=>{
+          const r = Math.floor(i/8), c = i%8;
+          const cell = boardEl.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
+          if(cell) cell.classList.add('highlight');
+        });
+      }
+    }
+  }
+
+  function posStr(r,c){ return String.fromCharCode(65+c) + (8-r); }
+
+  function log(txt){ const p = document.createElement('div'); p.textContent = txt; logEl.prepend(p); }
+  function clearLog(){ logEl.innerHTML = ''; }
+
+  function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  function checkWinner(){
+    const red = getAllPieces('red').length;
+    const black = getAllPieces('black').length;
+    if(red===0) return 'black';
+    if(black===0) return 'red';
+    const redMoves = getAllPieces('red').some(it => getValidMovesFor(it.r,it.c).length>0);
+    const blackMoves = getAllPieces('black').some(it => getValidMovesFor(it.r,it.c).length>0);
+    if(!redMoves) return 'black';
+    if(!blackMoves) return 'red';
+    return null;
+  }
+
+  function aiMove(){
+    if(state.turn!=='black') return;
+    const captures = getAllCaptures('black');
+    if(captures.length>0){ const pick = captures[Math.floor(Math.random()*captures.length)]; makeMove(pick); return; }
+    const allMoves = [];
+    const pieces = getAllPieces('black');
+    for(const it of pieces){ const moves = getValidMovesFor(it.r,it.c); for(const m of moves) allMoves.push(m); }
+    if(allMoves.length===0) return;
+    const pick = allMoves[Math.floor(Math.random()*allMoves.length)];
+    makeMove(pick);
+  }
+
+  function undo(){ if(state.history.length===0) return; const prev = state.history.pop(); state.board = prev.board; state.turn = prev.turn; state.selected = null; updateUI(); log('Undo performed'); }
+
+  newBtn.addEventListener('click', ()=> setupNewGame());
+  undoBtn.addEventListener('click', ()=> undo());
+  document.querySelectorAll('input[name="mode"]').forEach(inp=>{
+    inp.addEventListener('change', ()=>{ state.mode = document.querySelector('input[name="mode"]:checked').value; log('Mode: '+ state.mode); });
+  });
+
+  // initialize
+  setupNewGame();
+  updateUI();
+  </script>
+</body>
+</html>
